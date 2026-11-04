@@ -19,7 +19,7 @@ if __name__ == "__main__":
     conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
     register_vector(conn)
 
-    conn.execute("CREATE TABLE IF NOT EXISTS chunks ( id SERIAL PRIMARY KEY, paper_id TEXT NOT NULL, chunker TEXT NOT NULL, chunk_index INT NOT NULL, content TEXT NOT NULL, embedding VECTOR(384) NOT NULL)")
+    conn.execute("CREATE TABLE IF NOT EXISTS chunks ( id SERIAL PRIMARY KEY, paper_id TEXT NOT NULL, chunker TEXT NOT NULL, chunk_index INT NOT NULL, char_start INT NOT NULL, char_end INT NOT NULL, content TEXT NOT NULL, embedding VECTOR(384) NOT NULL)")
 
     conn.execute("CREATE INDEX IF NOT EXISTS chunks_paper_chunker_idx ON chunks (paper_id, chunker)")
 
@@ -42,20 +42,22 @@ if __name__ == "__main__":
         if not chunks:
             continue
 
-        vecs = model.encode(chunks, normalize_embeddings=True)
+        texts = [c[0] for c in chunks]
+        vecs = model.encode(texts, normalize_embeddings=True)
+        
 
         rows = []
-        for idx, (content, vec) in enumerate(zip(chunks, vecs)) : 
-            rows.append((paper["id"], CHUNKER_NAME, idx, content, vec))
+        for idx, ((content, start , end), vec) in enumerate(zip(chunks, vecs)) : 
+            rows.append((paper["id"], CHUNKER_NAME, idx, start, end, content, vec))
 
         with conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO chunks (paper_id, chunker, chunk_index, content, embedding) "
-                "VALUES (%s, %s, %s, %s, %s)",
+                "INSERT INTO chunks (paper_id, chunker, chunk_index, char_start, char_end, content, embedding) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 rows,
             )
 
-        for chunk in chunks:
+        for chunk in texts:
             n_tokens = len(model.tokenizer.encode(chunk))
             max_tokens = max(max_tokens, n_tokens)
 

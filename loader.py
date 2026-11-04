@@ -18,7 +18,7 @@ def load_papers(split = "validation", limit= None):
         non_empty = [p for p in all_paragraphs if p.strip()]
         normalized = [" ".join(p.split()) for p in non_empty]
 
-        resultList.append({"id": paper["id"], "title": paper["title"], "paragraphs": normalized})
+        resultList.append({"id": paper["id"], "title": paper["title"], "paragraphs": normalized, "text": " ".join(normalized)})
 
     return resultList
 

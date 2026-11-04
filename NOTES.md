@@ -19,6 +19,7 @@
 - Loader: abstract first, then all `full_text` paragraphs in order, empty ones removed, whitespace normalized with `" ".join(p.split())`.
 - Embeddings: `BAAI/bge-small-en-v1.5`, 384 dims, normalized, so cosine similarity = dot product.
 - Exact vector search (no HNSW index) so approximation noise doesn't affect results.
+- Each chunk stores `char_start`/`char_end` positions in the paper's joined text (`" ".join(paragraphs)`). Evidence relevance is computed by span overlap: a chunk is relevant if it covers ≥50% of an evidence paragraph's span.
 
 ## Finding: word-based chunks exceeded the model's token limit
 
