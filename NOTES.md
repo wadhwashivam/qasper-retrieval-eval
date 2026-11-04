@@ -12,6 +12,7 @@
   - Mismatch causes seen: section headings cited as evidence (e.g. "Languages", "Datasets"), and spacing differences (e.g. "BIBREF20 , which").
   - Phase 2 plan: match by overlap after whitespace normalization; drop evidence shorter than a few words.
 - 892 of 1,005 questions have at least one text evidence paragraph. The other 113 are excluded from retrieval evaluation (no text evidence).
+- After filtering (text evidence only, ≥5 words, deduplicated across annotators): **889 usable questions** on the dev set (validation split). 3 questions were dropped because their only evidence was heading-length.
 
 ## Design decisions
 
@@ -20,6 +21,7 @@
 - Embeddings: `BAAI/bge-small-en-v1.5`, 384 dims, normalized, so cosine similarity = dot product.
 - Exact vector search (no HNSW index) so approximation noise doesn't affect results.
 - Each chunk stores `char_start`/`char_end` positions in the paper's joined text (`" ".join(paragraphs)`). Evidence relevance is computed by span overlap: a chunk is relevant if it covers ≥50% of an evidence paragraph's span.
+- Relevance rule validated on paper 1912.01214, Q "which multilingual approaches do they compare with?": evidence span (19730, 20675); chunk 13 covers 100%, chunk 14 covers 10% (overlap carry-over). Rule output {13} matches the manual diagnosis from Phase 1.
 
 ## Finding: word-based chunks exceeded the model's token limit
 
