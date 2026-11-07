@@ -1,4 +1,3 @@
-# questions to ask
 import os
 import ollama
 
@@ -12,7 +11,7 @@ from sentence_transformers import SentenceTransformer
 CHUNKER_NAME = "token_400_80"
 LLM_MODEL = "llama3.1:8b"
 
-def retrieve(conn, model, paper_id, question, k=5):
+def retrieve(conn, model, paper_id, question, k=5, chunker= CHUNKER_NAME):
         
     q_vec = model.encode(question,normalize_embeddings=True)
 
@@ -24,7 +23,7 @@ def retrieve(conn, model, paper_id, question, k=5):
         ORDER BY embedding <=> %s
         LIMIT %s
         """,
-        (q_vec, paper_id, CHUNKER_NAME, q_vec, k),
+        (q_vec, paper_id, chunker, q_vec, k),
     ).fetchall()
 
     return rows

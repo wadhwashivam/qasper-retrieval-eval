@@ -48,6 +48,19 @@
 - Ollama default context window is 4,096 tokens and truncates silently. 5 chunks × ~400 tokens + instructions ≈ 2,500 tokens, so it fits. Raising k to 10 would exceed it.
 - Prompt tells the model to answer only from the numbered passages, cite them as [n], and say "The provided context does not answer this question." if the answer is absent.
 
+## Phase 2 results: baseline (dev set, validation split)
+
+| Config | Questions | Hit@1 | Hit@3 | Hit@5 | MRR |
+|---|---|---|---|---|---|
+| token_400_80 + dense | 888 | 0.287 | 0.597 | 0.759 | 0.490 |
+| token_400_80 + random | 888 | 0.131 | 0.349 | 0.525 | 0.314 |
+
+- 889 usable questions; 1 skipped (evidence not locatable), 0 skipped for no covering chunk. Eval runs in ~14 s.
+- Dense clearly beats random, but random Hit@5 is already 0.525 (~16 chunks per paper, so top 5 ≈ a third of the paper). Hit@1 and MRR are the more discriminating metrics.
+- Dense ranks the gold evidence first only 29% of the time, so there is real headroom for Phase 3.
+- Methodology issue for Phase 3: chunkers with different chunk counts have different random baselines. Compare at equal token budget, not equal k.
+- Deterministic: two runs give identical numbers.
+
 ## First test: paper 1912.01214 (4 QASPER questions)
 
 | Question | Result |
