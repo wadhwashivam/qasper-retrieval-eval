@@ -5,14 +5,24 @@ from dotenv import load_dotenv
 from pgvector.psycopg import register_vector
 from sentence_transformers  import SentenceTransformer
 from loader import load_papers
-from chunking import token_chunks
+from chunking import token_chunks, para_chunks
 import time
 
 import sys
 
-SIZE = int(sys.argv[1]) if len(sys.argv) > 1 else 400
-OVERLAP = int(sys.argv[2]) if len(sys.argv) > 2 else 80
-CHUNKER_NAME = f"token_{SIZE}_{OVERLAP}"
+KIND = sys.argv[1] if len(sys.argv) > 1 else "token"
+
+if KIND == "token":
+    SIZE = int(sys.argv[2]) if len(sys.argv) > 2 else 400
+    OVERLAP = int(sys.argv[3]) if len(sys.argv) > 3 else 80
+    CHUNKER_NAME = f"token_{SIZE}_{OVERLAP}"
+
+elif KIND == "para":
+    MAX_TOKENS = int(sys.argv[2]) if len(sys.argv) > 2 else 400
+    CHUNKER_NAME = f"para_{MAX_TOKENS}"
+
+else:
+    raise ValueError(f"Unknown chunker kind: {KIND}")
 
 if __name__ == "__main__":
     load_dotenv()
@@ -39,7 +49,10 @@ if __name__ == "__main__":
     over_limit = 0
 
     for i, paper in enumerate(papers, start = 1):
-        chunks = token_chunks(paper["paragraphs"], model.tokenizer, SIZE, OVERLAP)
+        if KIND == "token":
+            chunks = token_chunks(paper["paragraphs"], model.tokenizer, SIZE, OVERLAP)
+        else:
+            chunks = para_chunks(paper["paragraphs"], model.tokenizer, MAX_TOKENS)
 
         if not chunks:
             continue

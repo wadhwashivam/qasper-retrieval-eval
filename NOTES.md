@@ -75,6 +75,25 @@ Python dense ranking reproduces the SQL results exactly (0.287 / 0.597 / 0.759 /
 - Hit@k and MRR are not comparable across chunk sizes; use them only to compare retrievers on the same chunker.
 - To do in Phase 4: paired significance test on per-question results.
 
+## Phase 3b: paragraph-aware chunking (dense retrieval, 888 questions)
+
+| Chunker | Chunks | Hit@1 | MRR | Budget ~1k | Random ~1k | Gain ~1k | Budget ~2k | Random ~2k | Gain ~2k |
+|---|---|---|---|---|---|---|---|---|---|
+| token_400_80 | 4,619 | 0.287 | 0.490 | 0.616 | 0.364 | 0.252 | 0.809 | 0.592 | 0.217 |
+| para_400 | 4,636 | 0.310 | 0.495 | 0.664 | 0.382 | 0.282 | 0.848 | 0.626 | 0.222 |
+| token_200_40 | — | 0.293 | 0.459 | 0.686 | 0.382 | 0.304 | 0.858 | 0.610 | 0.248 |
+| para_200 | 10,413 | 0.302 | 0.469 | 0.771 | 0.416 | 0.355 | 0.900 | 0.655 | 0.245 |
+
+Gain = dense minus random at the same budget (the fair comparison across chunkers).
+
+- Paragraph-aware chunking beats fixed-token chunking at a ~1k-token budget (gain over random: +3.0 points at 400, +5.1 at 200), and raises Hit@1 (0.310 vs 0.287 at 400).
+- At ~2k tokens the advantage disappears (gains within ~0.5 points): chunk boundaries matter most when the context budget is tight.
+- Best so far: para_200, 0.771 at ~1k tokens (gain 0.355 over random).
+- Variable chunk lengths make random baselines differ across chunkers, so compare by gain over random.
+- Hit@1 and MRR across chunkers are shown for reference only; they aren't comparable across chunk sizes.
+- To do in Phase 4: paired significance test on per-question results.
+- Re-test with paragraph-aware chunking: para_200 ranks the evidence **3rd** (vs 10th with token_400_80); found within ~1k tokens. para_400 rank: [fill in].
+
 ## First test: paper 1912.01214 (4 QASPER questions)
 
 | Question | Result |
