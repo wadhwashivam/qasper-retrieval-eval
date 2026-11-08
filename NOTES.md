@@ -32,6 +32,8 @@
 - Consequence: the tail of long chunks would be silently dropped from embeddings, biasing retrieval results.
 - Fix: switched to token-based chunking using the model's own tokenizer (sizes in model tokens), slicing the original text by token character offsets so casing and spacing are preserved.
 
+Python dense ranking reproduces the SQL results exactly (0.287 / 0.597 / 0.759 / 0.490).
+
 ## Index runs
 
 | Chunker | Papers | Chunks | Seconds | Max tokens |
@@ -60,6 +62,18 @@
 - Dense ranks the gold evidence first only 29% of the time, so there is real headroom for Phase 3.
 - Methodology issue for Phase 3: chunkers with different chunk counts have different random baselines. Compare at equal token budget, not equal k.
 - Deterministic: two runs give identical numbers.
+
+## Phase 3a: chunk size (dense retrieval, symmetric relevance rule, 888 questions)
+
+| Chunker | Hit@1 | Hit@5 | MRR | Budget ~1k | Random ~1k | Budget ~2k | Random ~2k |
+|---|---|---|---|---|---|---|---|
+| token_400_80 | 0.287 | 0.761 | 0.490 | 0.616 | 0.364 | 0.809 | 0.592 |
+| token_200_40 | 0.293 | 0.650 | 0.459 | 0.686 | 0.382 | 0.858 | 0.610 |
+
+- Budget metric validated: random scores are nearly equal across chunk sizes, unlike Hit@5 (random 0.527 vs 0.339).
+- 200-token chunks beat 400-token chunks at equal text budget: +5.2 points over random at ~1k, +3.1 at ~2k.
+- Hit@k and MRR are not comparable across chunk sizes; use them only to compare retrievers on the same chunker.
+- To do in Phase 4: paired significance test on per-question results.
 
 ## First test: paper 1912.01214 (4 QASPER questions)
 

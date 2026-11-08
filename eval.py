@@ -10,14 +10,17 @@ from dotenv import load_dotenv
 
 from sentence_transformers import SentenceTransformer
 
-from ask import retrieve
+from retrievers import fetch_paper_chunks, dense_rank
 from labels import evidence_spans, relevant_chunks
 
 from loader import load_papers, load_questions
 
-CHUNKER= "token_400_80"
-RETRIEVER = "dense"
+import sys
+
+CHUNKER= sys.argv[1] if len(sys.argv) > 1 else "token_400_80"
+RETRIEVER = sys.argv[2] if len(sys.argv) > 2 else "dense"
 KS = [1, 3, 5]
+BUDGETS = {"b1k": 4750, "b2k": 9500}
 RANDOM_TRIALS = 200
 SEED = 42
 
@@ -30,9 +33,10 @@ def first_relevant_rank(ranked, relevant):
     return None
 
 
-def random_baseline(chunks_ids, relevant, rng):
+def random_baseline(chunks_ids, relevant, rng, lengths):
     ids = list(chunks_ids)
     hits = {k:0 for k in KS}
+    budget_hits = {name: 0 for name in BUDGETS}
 
     rr_total = 0.0
 
@@ -44,11 +48,27 @@ def random_baseline(chunks_ids, relevant, rng):
                 hits[k] += 1
         rr_total += 1/rank
 
+        for name, budget in BUDGETS.items():
+            budget_hits[name] += hit_within_budget(ids, relevant, lengths, budget)
+
     result = {f"rand_hit{k}": hits[k]/ RANDOM_TRIALS for k in KS}
     result["rand_rr"] = rr_total / RANDOM_TRIALS
 
+    for name in BUDGETS:
+        result[f"rand_hit_{name}"] = budget_hits[name] / RANDOM_TRIALS
+
     return result
-    
+
+
+def hit_within_budget(ranked, relevant, lengths, budget):
+    used = 0
+    for chunk_index in ranked:
+        if used >= budget:
+            return 0
+        if chunk_index in relevant:
+            return 1
+        used += lengths[chunk_index]
+    return 0        
 
 if __name__ == "__main__":
     load_dotenv()
@@ -78,20 +98,19 @@ if __name__ == "__main__":
             skipped_not_found += 1 
             continue
 
-        chunks = conn.execute(
-                "SELECT chunk_index, char_start, char_end FROM chunks "
-                "WHERE paper_id = %s AND chunker = %s ORDER BY chunk_index",
-                (q["paper_id"], CHUNKER),
-            ).fetchall()
+        chunks = fetch_paper_chunks(conn,q["paper_id"], CHUNKER)
 
-        relevant = relevant_chunks(chunks,spans)
+        relevant = relevant_chunks([c[:3] for c in chunks], spans)
+
         if not relevant:
             skipped_no_chunk += 1
             continue
 
-        results = retrieve(conn, model, q["paper_id"], q["question"], k=len(chunks), chunker=CHUNKER)
-        ranked = [r[0] for r in results]
+        ranked = dense_rank(model, q["question"], chunks)
+        
         rank = first_relevant_rank(ranked, relevant)
+
+        lengths = {c[0]: c[2] - c[1] for c in chunks}
 
         row = {
             "question_id": q["question_id"],
@@ -104,9 +123,11 @@ if __name__ == "__main__":
             "hit3": 1 if rank <=3 else 0,
             "hit5": 1 if rank <=5 else 0,
             "rr": 1/rank,
+            "hit_b1k": hit_within_budget(ranked, relevant, lengths, BUDGETS["b1k"]),
+            "hit_b2k": hit_within_budget(ranked, relevant, lengths, BUDGETS["b2k"]),
         }
 
-        row.update(random_baseline([c[0] for c in chunks], relevant, rng))
+        row.update(random_baseline([c[0] for c in chunks], relevant, rng, lengths))
 
         rows.append(row)
 
@@ -127,8 +148,12 @@ if __name__ == "__main__":
         "rand_hit5": round(mean(r["rand_hit5"] for r in rows), 3),
         "rand_mrr": round(mean(r["rand_rr"] for r in rows), 3),
         "seconds": round(elapsed, 1),
+        "hit_b1k": round(mean(r["hit_b1k"] for r in rows), 3),
+        "hit_b2k": round(mean(r["hit_b2k"] for r in rows), 3),
+        "rand_hit_b1k": round(mean(r["rand_hit_b1k"] for r in rows), 3),
+        "rand_hit_b2k": round(mean(r["rand_hit_b2k"] for r in rows), 3),
     }
- 
+
     print(f"\n{CHUNKER} + {RETRIEVER}")
     print(f"Questions evaluated: {summary['questions']} "
           f"(skipped: {skipped_not_found} evidence not found, {skipped_no_chunk} no covering chunk)")
@@ -137,6 +162,9 @@ if __name__ == "__main__":
     print(f"{'Random':10}{summary['rand_hit1']:>8}{summary['rand_hit3']:>8}"
           f"{summary['rand_hit5']:>8}{summary['rand_mrr']:>8}")
     print(f"Seconds: {summary['seconds']}")
+
+    print(f"Budget ~1k tokens: dense {summary['hit_b1k']} vs random {summary['rand_hit_b1k']}")
+    print(f"Budget ~2k tokens: dense {summary['hit_b2k']} vs random {summary['rand_hit_b2k']}")
  
     os.makedirs("results", exist_ok=True)
  

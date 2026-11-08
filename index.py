@@ -8,9 +8,11 @@ from loader import load_papers
 from chunking import token_chunks
 import time
 
-CHUNKER_NAME = "token_400_80"
-SIZE = 400
-OVERLAP = 80
+import sys
+
+SIZE = int(sys.argv[1]) if len(sys.argv) > 1 else 400
+OVERLAP = int(sys.argv[2]) if len(sys.argv) > 2 else 80
+CHUNKER_NAME = f"token_{SIZE}_{OVERLAP}"
 
 if __name__ == "__main__":
     load_dotenv()
