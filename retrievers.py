@@ -2,6 +2,7 @@ import numpy as np
 import re
 
 from rank_bm25 import BM25Okapi
+from sentence_transformers import CrossEncoder
 
 def fetch_paper_chunks(conn, paper_id, chunker):
         return conn.execute(
@@ -40,6 +41,17 @@ def rrf_fuse(rankings, k=60):
 
 def hybrid_rank(model, question, chunks):
     return rrf_fuse([dense_rank(model,question,chunks), bm25_rank(question, chunks)])
+
+def rerank_rank(reranker, question, chunks):
+
+    pairs = [(question, c[3]) for c in chunks]
+
+    scores = reranker.predict(pairs)
+    order = np.argsort(scores)[::-1]
+
+    return [chunks[i][0] for i in order]
+
+
 
 
 if __name__ == "__main__":

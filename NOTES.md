@@ -117,6 +117,54 @@ Gain = dense minus random at the same budget (the fair comparison across chunker
 - Best at the ~1k budget so far: para_200 + dense (0.771).
 - Weighted RRF is possible but would mean tuning on dev; skipped to avoid overfitting.
 
+## Phase 3d: reranker (BAAI/bge-reranker-base, reranks all chunks in the paper)
+
+- token_400_80 + rerank: Hit@1 0.248, Hit@3 0.556, Hit@5 0.756, MRR 0.455, Budget ~1k 0.568, ~2k 0.791. 272.5 s (~18x slower than dense).
+- Unexpected: worse than dense (Hit@1 0.287) and hybrid (0.323) on the same chunks. Investigating truncation (the reranker uses a different tokenizer, XLM-RoBERTa) before drawing conclusions.
+- Truncation check: 113 of 4,619 token_400_80 chunks (2.4%) exceed 480 reranker tokens (max 518); para_200 has none (max 265). Too few to explain the drop; truncation mostly ruled out. Leading hypothesis: domain mismatch (reranker trained on web search; within-paper chunks are all on-topic).
+- para_200 + rerank (no truncation possible): Hit@1 0.190 (dense 0.302), MRR 0.369 (dense 0.469), Budget ~1k 0.707 (dense 0.771), Budget ~2k 0.869 (dense 0.900). 281.3 s.
+- Sanity check: Hit@1 is ~3x random (0.068), so the reranker works; it just ranks worse than dense here.
+- Conclusion: the reranker's underperformance is real, not a truncation artifact. Worse on shorter chunks, where it resembles BM25 (Hit@1 0.181). Hypothesis: domain mismatch (trained on web search; within-paper chunks are all on-topic) plus terse, context-dependent questions. To probe in Phase 4 failure analysis.
+- Decision: dropped "hybrid + rerank" from the plan, since the reranker alone underperforms on both chunkers.
+- token_200_40 + rerank: Hit@1 0.193 (dense 0.293), MRR 0.369 (dense 0.459). 270.6 s.
+- para_400 + rerank: Hit@1 0.233 (dense 0.310), MRR 0.444 (dense 0.495). 276.6 s. (First attempt crashed when the Postgres container stopped mid-run, likely memory pressure; re-run after restarting it.)
+- Decision: dropped "hybrid + rerank" from the plan, since the reranker alone underperforms dense on all four chunkers.
+
+## Phase 3: full grid (dev set, 888 questions)
+
+| Chunker | Retriever | Hit@1 | MRR | Budget ~1k | Gain ~1k | Budget ~2k | Gain ~2k | Seconds |
+|---|---|---|---|---|---|---|---|---|
+| token_400_80 | dense | 0.287 | 0.490 | 0.616 | 0.252 | 0.809 | 0.217 | 14.5 |
+| token_400_80 | bm25 | 0.242 | 0.444 | 0.553 | 0.189 | 0.759 | 0.167 | 3.1 |
+| token_400_80 | hybrid | 0.323 | 0.519 | 0.639 | 0.275 | 0.814 | 0.222 | 14.7 |
+| token_400_80 | rerank | 0.248 | 0.455 | 0.568 | 0.204 | 0.791 | 0.199 | 272.5 |
+| token_200_40 | dense | 0.293 | 0.459 | 0.686 | 0.304 | 0.858 | 0.248 | 16.1 |
+| token_200_40 | bm25 | 0.173 | 0.349 | 0.596 | 0.214 | 0.786 | 0.176 | 3.9 |
+| token_200_40 | hybrid | 0.276 | 0.447 | 0.695 | 0.313 | 0.865 | 0.255 | 16.6 |
+| token_200_40 | rerank | 0.193 | 0.369 | 0.622 | 0.240 | 0.811 | 0.201 | 270.6 |
+| para_400 | dense | 0.310 | 0.495 | 0.664 | 0.282 | 0.848 | 0.222 | 14.4 |
+| para_400 | bm25 | 0.230 | 0.432 | 0.604 | 0.222 | 0.806 | 0.180 | 2.7 |
+| para_400 | hybrid | 0.332 | 0.516 | 0.670 | 0.288 | 0.850 | 0.224 | 15.1 |
+| para_400 | rerank | 0.233 | 0.444 | 0.625 | 0.243 | 0.848 | 0.222 | 276.6 |
+| para_200 | dense | 0.302 | 0.469 | 0.771 | 0.355 | 0.900 | 0.245 | 15.6 |
+| para_200 | bm25 | 0.181 | 0.353 | 0.653 | 0.237 | 0.834 | 0.179 | 4.1 |
+| para_200 | hybrid | 0.280 | 0.454 | 0.752 | 0.336 | 0.900 | 0.245 | 15.5 |
+| para_200 | rerank | 0.190 | 0.369 | 0.707 | 0.291 | 0.869 | 0.214 | 281.3 |
+
+Gain = retriever minus random at the same budget. Hit@1 and MRR are comparable only between retrievers on the same chunker; compare chunkers by gain.
+
+### Findings
+1. Paragraph-aware chunking beats fixed-token chunking with every retriever, at both sizes (gain at ~1k budget, 6 of 6 dense/bm25/hybrid comparisons). Strongest result; confirms the chunk 13 hypothesis at scale.
+2. Hybrid (RRF) beats dense with ~400-token chunks (token_400 Hit@1 0.287 → 0.323; para_400 0.310 → 0.332, best Hit@1 overall) but not with ~200-token chunks (token_200 0.293 → 0.276; para_200 0.302 → 0.280). Replicated across both chunking styles.
+3. The cross-encoder reranker (bge-reranker-base) underperformed dense on all four chunkers, at ~18x the runtime. Truncation ruled out (para_200 has no truncated chunks; Hit@1 ~3x random, so the model works).
+4. BM25 alone is the weakest retriever everywhere, worst on short chunks.
+5. Best at ~1k budget: para_200 + dense (gain 0.355 over random). Best Hit@1: para_400 + hybrid (0.332).
+6. At the ~2k budget, gains converge (most dense/hybrid/rerank configs between 0.20 and 0.25); configurations separate mainly at the ~1k budget (0.19 to 0.355). Design choices matter most when the context budget is tight.
+
+### Decisions
+- Semantic chunker (3e) skipped: findings are already consistent across configurations, and Phase 4 (test split, significance, failure analysis) adds more value.
+- All results above are dev set (validation split). Final numbers for the best configurations come from a single run on the test split in Phase 4.
+
 ## First test: paper 1912.01214 (4 QASPER questions)
 
 | Question | Result |

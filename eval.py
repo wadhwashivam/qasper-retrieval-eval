@@ -8,14 +8,16 @@ import psycopg
 from pgvector.psycopg import register_vector
 from dotenv import load_dotenv
 
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
-from retrievers import fetch_paper_chunks, dense_rank, bm25_rank, hybrid_rank
+from retrievers import fetch_paper_chunks, dense_rank, bm25_rank, hybrid_rank, rerank_rank
 from labels import evidence_spans, relevant_chunks
 
 from loader import load_papers, load_questions
 
 import sys
+
+
 
 CHUNKER= sys.argv[1] if len(sys.argv) > 1 else "token_400_80"
 RETRIEVER = sys.argv[2] if len(sys.argv) > 2 else "dense"
@@ -77,6 +79,10 @@ if __name__ == "__main__":
 
     model = SentenceTransformer("BAAI/bge-small-en-v1.5")
 
+    reranker = None
+    if RETRIEVER == "rerank":
+        reranker = CrossEncoder("BAAI/bge-reranker-base", max_length=512)
+
     rng = random.Random(SEED)
 
     papers = {p["id"]: p for p in load_papers()}
@@ -112,6 +118,8 @@ if __name__ == "__main__":
             ranked = bm25_rank(q["question"], chunks)
         elif RETRIEVER == "hybrid":
             ranked = hybrid_rank(model, q["question"], chunks)
+        elif RETRIEVER == "rerank":
+            ranked = rerank_rank(reranker, q["question"], chunks)
         else:
             raise ValueError(f"Unknown retriever: {RETRIEVER}")
         
