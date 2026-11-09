@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from sentence_transformers import SentenceTransformer
 
-from retrievers import fetch_paper_chunks, dense_rank
+from retrievers import fetch_paper_chunks, dense_rank, bm25_rank, hybrid_rank
 from labels import evidence_spans, relevant_chunks
 
 from loader import load_papers, load_questions
@@ -106,7 +106,14 @@ if __name__ == "__main__":
             skipped_no_chunk += 1
             continue
 
-        ranked = dense_rank(model, q["question"], chunks)
+        if RETRIEVER == "dense":
+            ranked = dense_rank(model, q["question"], chunks)
+        elif RETRIEVER == "bm25":
+            ranked = bm25_rank(q["question"], chunks)
+        elif RETRIEVER == "hybrid":
+            ranked = hybrid_rank(model, q["question"], chunks)
+        else:
+            raise ValueError(f"Unknown retriever: {RETRIEVER}")
         
         rank = first_relevant_rank(ranked, relevant)
 
@@ -158,13 +165,13 @@ if __name__ == "__main__":
     print(f"Questions evaluated: {summary['questions']} "
           f"(skipped: {skipped_not_found} evidence not found, {skipped_no_chunk} no covering chunk)")
     print(f"{'':10}{'Hit@1':>8}{'Hit@3':>8}{'Hit@5':>8}{'MRR':>8}")
-    print(f"{'Dense':10}{summary['hit1']:>8}{summary['hit3']:>8}{summary['hit5']:>8}{summary['mrr']:>8}")
+    print(f"{RETRIEVER:10}{summary['hit1']:>8}{summary['hit3']:>8}{summary['hit5']:>8}{summary['mrr']:>8}")
     print(f"{'Random':10}{summary['rand_hit1']:>8}{summary['rand_hit3']:>8}"
           f"{summary['rand_hit5']:>8}{summary['rand_mrr']:>8}")
     print(f"Seconds: {summary['seconds']}")
 
-    print(f"Budget ~1k tokens: dense {summary['hit_b1k']} vs random {summary['rand_hit_b1k']}")
-    print(f"Budget ~2k tokens: dense {summary['hit_b2k']} vs random {summary['rand_hit_b2k']}")
+    print(f"Budget ~1k tokens: {RETRIEVER} {summary['hit_b1k']} vs random {summary['rand_hit_b1k']}")
+    print(f"Budget ~2k tokens: {RETRIEVER} {summary['hit_b2k']} vs random {summary['rand_hit_b2k']}")
  
     os.makedirs("results", exist_ok=True)
  

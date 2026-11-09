@@ -1,4 +1,7 @@
 import numpy as np
+import re
+
+from rank_bm25 import BM25Okapi
 
 def fetch_paper_chunks(conn, paper_id, chunker):
         return conn.execute(
@@ -15,3 +18,30 @@ def dense_rank(model, question, chunks):
     order = np.argsort(scores)[::-1]
 
     return [chunks[i][0] for i in order]
+
+def tokenize(text):
+    return re.findall(r"\w+", text.lower())
+
+def bm25_rank(question, chunks):
+    corpus = [tokenize(c[3]) for c in chunks]
+    bm25 = BM25Okapi(corpus)
+
+    scores = bm25.get_scores(tokenize(question))
+    order = np.argsort(scores)[::-1]
+
+    return [chunks[i][0] for i in order]
+
+def rrf_fuse(rankings, k=60):
+    scores = {}
+    for ranking in rankings:         
+        for pos, idx in enumerate(ranking, start = 1):
+            scores[idx] = scores.get(idx, 0) + 1 / (k + pos)
+    return sorted(scores, key = scores.get, reverse=True)
+
+def hybrid_rank(model, question, chunks):
+    return rrf_fuse([dense_rank(model,question,chunks), bm25_rank(question, chunks)])
+
+
+if __name__ == "__main__":
+    print(rrf_fuse([[0,1,2],[2,0,1]]))
+    print(tokenize("BIBREF19, MultiUN! The 2 datasets."))

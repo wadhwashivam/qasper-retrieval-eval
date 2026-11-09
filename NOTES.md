@@ -94,6 +94,29 @@ Gain = dense minus random at the same budget (the fair comparison across chunker
 - To do in Phase 4: paired significance test on per-question results.
 - Re-test with paragraph-aware chunking: para_200 ranks the evidence **3rd** (vs 10th with token_400_80); found within ~1k tokens. para_400 rank: [fill in].
 
+## Phase 3c: BM25 and hybrid (RRF, k=60), 888 questions
+
+### token_400_80
+| Retriever | Hit@1 | Hit@3 | Hit@5 | MRR | Budget ~1k | Budget ~2k | Seconds |
+|---|---|---|---|---|---|---|---|
+| dense | 0.287 | 0.598 | 0.761 | 0.490 | 0.616 | 0.809 | ~15 |
+| bm25 | 0.242 | 0.546 | 0.708 | 0.444 | 0.553 | 0.759 | 3.1 |
+| hybrid | 0.323 | 0.636 | 0.788 | 0.519 | 0.639 | 0.814 | 14.7 |
+
+### para_200
+| Retriever | Hit@1 | Hit@3 | Hit@5 | MRR | Budget ~1k | Budget ~2k | Seconds |
+|---|---|---|---|---|---|---|---|
+| dense | 0.302 | 0.539 | 0.681 | 0.469 | 0.771 | 0.900 | ~16 |
+| bm25 | 0.181 | 0.408 | 0.573 | 0.353 | 0.653 | 0.834 | 4.1 |
+| hybrid | 0.280 | 0.523 | 0.681 | 0.454 | 0.752 | 0.900 | 15.5 |
+
+- BM25 index built per question over that paper's chunks only (IDF is within-paper).
+- On 400-token chunks, hybrid beats dense and BM25 on every metric (Hit@1 0.287 → 0.323): the retrievers are complementary.
+- On para_200, hybrid is worse than dense (Hit@1 0.302 → 0.280). BM25 is much weaker on short chunks (12-point Hit@1 gap vs 4.5 on 400-token chunks), and equal-weight RRF lets the weaker retriever drag the stronger one down.
+- Gains don't stack: paragraph chunking + dense beats paragraph chunking + hybrid. Hybrid helps only when the two retrievers are comparably strong.
+- Best at the ~1k budget so far: para_200 + dense (0.771).
+- Weighted RRF is possible but would mean tuning on dev; skipped to avoid overfitting.
+
 ## First test: paper 1912.01214 (4 QASPER questions)
 
 | Question | Result |
