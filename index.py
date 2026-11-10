@@ -11,6 +11,7 @@ import time
 import sys
 
 KIND = sys.argv[1] if len(sys.argv) > 1 else "token"
+SPLIT = os.environ.get("SPLIT", "validation")
 
 if KIND == "token":
     SIZE = int(sys.argv[2]) if len(sys.argv) > 2 else 400
@@ -35,11 +36,14 @@ if __name__ == "__main__":
 
     conn.execute("CREATE INDEX IF NOT EXISTS chunks_paper_chunker_idx ON chunks (paper_id, chunker)")
 
-    conn.execute("DELETE FROM chunks WHERE chunker = %s", (CHUNKER_NAME,))
+    papers = load_papers(SPLIT)
+
+    paper_ids = [p["id"] for p in papers]
+
+    conn.execute("DELETE FROM chunks WHERE chunker = %s AND paper_id = ANY(%s)", (CHUNKER_NAME, paper_ids))
 
     model = SentenceTransformer("BAAI/bge-small-en-v1.5")
 
-    papers = load_papers()
 
     start_time = time.perf_counter()
 

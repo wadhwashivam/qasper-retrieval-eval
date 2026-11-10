@@ -1,6 +1,9 @@
 import csv
+import sys
 
-with open("results/summary.csv") as f:
+split = sys.argv[1] if len(sys.argv) > 1 else "validation"
+
+with open(f"results/{split}/summary.csv") as f:
     rows = list(csv.DictReader(f))
 
 latest = {(r["chunker"], r["retriever"]): r for r in rows}

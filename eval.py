@@ -26,6 +26,8 @@ BUDGETS = {"b1k": 4750, "b2k": 9500}
 RANDOM_TRIALS = 200
 SEED = 42
 
+SPLIT = os.environ.get("SPLIT", "validation")
+
 def first_relevant_rank(ranked, relevant):
 
     for pos,idx in enumerate(ranked, start = 1):
@@ -85,9 +87,9 @@ if __name__ == "__main__":
 
     rng = random.Random(SEED)
 
-    papers = {p["id"]: p for p in load_papers()}
+    papers = {p["id"]: p for p in load_papers(SPLIT)}
 
-    questions = load_questions()
+    questions = load_questions(SPLIT)
 
     rows = []
 
@@ -169,7 +171,7 @@ if __name__ == "__main__":
         "rand_hit_b2k": round(mean(r["rand_hit_b2k"] for r in rows), 3),
     }
 
-    print(f"\n{CHUNKER} + {RETRIEVER}")
+    print(f"\n[{SPLIT}] {CHUNKER} + {RETRIEVER}")
     print(f"Questions evaluated: {summary['questions']} "
           f"(skipped: {skipped_not_found} evidence not found, {skipped_no_chunk} no covering chunk)")
     print(f"{'':10}{'Hit@1':>8}{'Hit@3':>8}{'Hit@5':>8}{'MRR':>8}")
@@ -181,16 +183,16 @@ if __name__ == "__main__":
     print(f"Budget ~1k tokens: {RETRIEVER} {summary['hit_b1k']} vs random {summary['rand_hit_b1k']}")
     print(f"Budget ~2k tokens: {RETRIEVER} {summary['hit_b2k']} vs random {summary['rand_hit_b2k']}")
  
-    os.makedirs("results", exist_ok=True)
+    os.makedirs(f"results/{SPLIT}", exist_ok=True)
  
     # One row per question, for the Phase 4 failure analysis.
-    with open(f"results/per_question_{CHUNKER}_{RETRIEVER}.csv", "w", newline="") as f:
+    with open(f"results/{SPLIT}/per_question_{CHUNKER}_{RETRIEVER}.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
  
     # One summary row per run, appended, so every configuration ends up in one table.
-    summary_path = "results/summary.csv"
+    summary_path = f"results/{SPLIT}/summary.csv"
     new_file = not os.path.exists(summary_path)
     with open(summary_path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(summary.keys()))

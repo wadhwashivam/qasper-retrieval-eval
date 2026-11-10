@@ -153,6 +153,20 @@ Gain = dense minus random at the same budget (the fair comparison across chunker
 
 Gain = retriever minus random at the same budget. Hit@1 and MRR are comparable only between retrievers on the same chunker; compare chunkers by gain.
 
+## Phase 4a: test split (pre-registered, written before running)
+
+Configurations (chosen on dev, run once on test):
+- dense and hybrid on all four chunkers: token_400_80, token_200_40, para_400, para_200 (8 runs)
+- rerank on token_400_80 and para_200 (2 runs)
+
+Expectations from dev, to be confirmed or refuted:
+1. Paragraph chunking beats fixed-token chunking at equal size (gain at ~1k budget), for dense and hybrid.
+2. Hybrid beats dense on Hit@1 with ~400-token chunks, but not with ~200-token chunks.
+3. Rerank underperforms dense on both chunkers tested.
+4. para_200 + dense has the highest gain at the ~1k budget.
+
+Rule: no changes to code, chunkers or parameters after seeing test results. Results reported as-is.
+
 ### Findings
 1. Paragraph-aware chunking beats fixed-token chunking with every retriever, at both sizes (gain at ~1k budget, 6 of 6 dense/bm25/hybrid comparisons). Strongest result; confirms the chunk 13 hypothesis at scale.
 2. Hybrid (RRF) beats dense with ~400-token chunks (token_400 Hit@1 0.287 → 0.323; para_400 0.310 → 0.332, best Hit@1 overall) but not with ~200-token chunks (token_200 0.293 → 0.276; para_200 0.302 → 0.280). Replicated across both chunking styles.
