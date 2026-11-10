@@ -167,6 +167,33 @@ Expectations from dev, to be confirmed or refuted:
 
 Rule: no changes to code, chunkers or parameters after seeing test results. Results reported as-is.
 
+### Test results (run once, reported as-is)
+
+| Chunker | Retriever | Hit@1 | MRR | Budget ~1k | Gain ~1k | Budget ~2k | Gain ~2k | Seconds |
+|---|---|---|---|---|---|---|---|---|
+| token_400_80 | dense | 0.365 | 0.554 | 0.690 | 0.281 | 0.845 | 0.208 | 22.1 |
+| token_400_80 | hybrid | 0.362 | 0.551 | 0.669 | 0.260 | 0.845 | 0.208 | 23.4 |
+| token_400_80 | rerank | 0.310 | 0.509 | 0.638 | 0.229 | 0.822 | 0.185 | 402.1 |
+| token_200_40 | dense | 0.317 | 0.492 | 0.751 | 0.328 | 0.888 | 0.239 | 24.7 |
+| token_200_40 | hybrid | 0.292 | 0.471 | 0.723 | 0.300 | 0.887 | 0.238 | 26.3 |
+| para_400 | dense | 0.357 | 0.542 | 0.720 | 0.300 | 0.881 | 0.218 | 22.0 |
+| para_400 | hybrid | 0.352 | 0.538 | 0.713 | 0.293 | 0.880 | 0.217 | 22.7 |
+| para_200 | dense | 0.330 | 0.498 | 0.793 | 0.339 | 0.923 | 0.228 | 25.2 |
+| para_200 | hybrid | 0.300 | 0.476 | 0.777 | 0.323 | 0.914 | 0.219 | 26.5 |
+| para_200 | rerank | 0.244 | 0.425 | 0.748 | 0.294 | 0.898 | 0.203 | 425.9 |
+
+Test questions evaluated: [fill in from results/test/summary.csv]
+
+### Pre-registered expectations vs test
+1. Paragraph > fixed-token at equal size (gain ~1k): CONFIRMED, 4/4 (+1.9, +3.3, +1.1, +2.3 points), smaller than on dev. Significance to be tested in 4b.
+2. Hybrid > dense on Hit@1 with ~400-token chunks: NOT REPLICATED (token_400 0.362 vs 0.365; para_400 0.352 vs 0.357). Hybrid not better with ~200-token chunks: confirmed. Conclusion: hybrid does not reliably beat dense; the dev gain was likely noise.
+3. Rerank < dense: CONFIRMED, 2/2 (Hit@1 0.310 vs 0.365; 0.244 vs 0.330), ~18x slower.
+4. para_200 + dense highest gain at ~1k: CONFIRMED (0.339).
+- Gains converge at ~2k again (0.185–0.239).
+- Absolute scores are higher on test than dev; compare configurations only within a split.
+
+Overall: paragraph-aware chunking with plain dense retrieval is the best configuration. Hybrid (BM25 + dense) and a cross-encoder reranker did not improve on it; the reranker cost ~18x more.
+
 ### Findings
 1. Paragraph-aware chunking beats fixed-token chunking with every retriever, at both sizes (gain at ~1k budget, 6 of 6 dense/bm25/hybrid comparisons). Strongest result; confirms the chunk 13 hypothesis at scale.
 2. Hybrid (RRF) beats dense with ~400-token chunks (token_400 Hit@1 0.287 → 0.323; para_400 0.310 → 0.332, best Hit@1 overall) but not with ~200-token chunks (token_200 0.293 → 0.276; para_200 0.302 → 0.280). Replicated across both chunking styles.
