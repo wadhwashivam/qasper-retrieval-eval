@@ -39,6 +39,9 @@ if __name__ == "__main__":
         ("rerank vs dense (para_200)",     "para_200_rerank",     "para_200_dense",     hit1),
     ]
 
+    results = []
+
+
     for label, a_cfg, b_cfg, metric in comparisons:
         a = load("test", a_cfg)
         b = load("test", b_cfg)
@@ -46,5 +49,11 @@ if __name__ == "__main__":
         mean, low, high, p = bootstrap(diffs)
         verdict = "significant" if low > 0 or high < 0 else "not significant"
         print(f"{label:34} {mean*100:+6.1f} pts   [{low*100:+5.1f}, {high*100:+5.1f}]   "
-              f"p={p:.3f}  n={len(diffs)}  {verdict}")
+                f"p={p:.3f}  n={len(diffs)}  {verdict}")
+        results.append({"label": label, "mean": mean, "low": low, "high": high, "p": p})
+
+    with open("results/test/significance.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+        writer.writeheader()
+        writer.writerows(results)
 
