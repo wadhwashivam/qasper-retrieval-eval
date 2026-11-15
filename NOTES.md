@@ -274,9 +274,38 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
 - Summary-section pull is paper-specific. Possible future work: down-weight abstract/conclusion chunks for detail questions.
 - Data quality: text extraction garbles numbers and LaTeX (#9, 10, 18); one heading-like evidence string passed the 5-word filter (#16).
 
-## Final conclusions (as of Phase 4b)
-1. **Cross-encoder reranker is significantly worse than plain dense retrieval** (−5.5 and −8.6 Hit@1 points on test), at ~18x the cost. Most robust result.
+## Phase 5a: FastAPI backend
+
+- `api.py` exposes the pipeline over HTTP. Run with `uvicorn api:app --reload`; interactive docs at `http://localhost:8000/docs`.
+- Uses **para_200 + dense**, the best configuration from the evaluation (top 5 × ~200 tokens ≈ the ~1k-token budget the results were measured at). `ask.py` still uses token_400_80; the API supersedes it for the demo.
+- Endpoints:
+  - `GET /health`: liveness check.
+  - `GET /papers`: id and title of every validation-split paper.
+  - `GET /papers/{paper_id}/questions`: that paper's QASPER questions (for suggestions in the UI); 404 if unknown.
+  - `POST /ask` `{paper_id, question}`: returns `{answer, passages}`, where each passage has `number` (matches the [n] citations), `chunk_index`, `score` and `text`. 404 for an unknown paper, 422 for invalid input (Pydantic: question 3–500 chars), 503 if Ollama is unreachable.
+- Model, paper titles and questions load once at startup (`lifespan`); a fresh DB connection per request (fine for a demo; a pool would be used under load).
+- Endpoints are plain `def`, not `async def`: the model, psycopg and Ollama calls are blocking, so FastAPI runs them in a thread pool.
+- Added `dense_search` to `retrievers.py` (top-k with text and scores, same `(index, text, score)` shape `build_prompt` expects). `dense_rank` left unchanged so the evaluation stays reproducible.
+- CORS allows `http://localhost:5173` for the React dev server (5b).
+- Not deployed: needs Postgres data, the embedding model and a local LLM, which free hosting tiers can't run. Demo via screen recording instead.
+
+### Full-circle check
+- Paper 1912.01214, "which multilingual approaches do they compare with?": the Phase 1 failure case (token_400_80, evidence at rank 10, model refused).
+- Through the API with para_200 + dense: evidence paragraph is passage 3; answer is correct ("pivoting, multilingual NMT (MNMT), and cross-lingual transfer without pretraining") and cites [3].
+- Use this question for the demo recording.
+
+
+## Final conclusions (as of Phase 5a)
+
+### Evaluation (test split, 1,308 questions)
+1. **Cross-encoder reranker is significantly worse than plain dense retrieval** (−5.5 and −8.6 Hit@1 points on test), at ~18x the cost. Most robust result; survives Bonferroni correction.
 2. **Hybrid (BM25 + dense) does not beat dense**: no significant difference on test; the dev-set gain did not replicate.
 3. **Paragraph-aware chunking improved retrieval in every comparison** (4/4 test, 6/6 dev), significantly so with hybrid retrieval; with dense alone the effect is positive but not individually significant.
-4. Best configuration: para_200 + dense (highest gain at ~1k budget on dev and test).
-5. Chunking and retrieval choices matter most when the context budget is tight (~1k tokens); at ~2k they converge.
+4. **Best configuration: para_200 + dense** (highest gain at the ~1k budget on dev and test).
+5. **Chunking and retrieval choices matter most when the context budget is tight** (~1k tokens); at ~2k they converge.
+
+### Failure analysis
+6. **Only 3% of test questions fail in every configuration**, so most failures are configuration-specific. In a sample of 20, about 30% were labelling artifacts (a correct passage retrieved, but annotators marked another), so the evaluation underestimates retrieval quality. The main genuine failure mode is **wording mismatch** between question and evidence, which neither dense nor BM25 retrieval solved here.
+
+### Applied
+7. **The best configuration now powers the API** (`POST /ask`, para_200 + dense, top 5). On the Phase 1 failure case (paper 1912.01214, "which multilingual approaches do they compare with?"), it retrieves the evidence as passage 3 and the model answers correctly with a citation, where the original token_400_80 setup ranked it 10th and the model refused. This is one illustrative example, not a measured result; the measured claims are points 1–6.
