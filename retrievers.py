@@ -51,7 +51,14 @@ def rerank_rank(reranker, question, chunks):
 
     return [chunks[i][0] for i in order]
 
-
+def dense_search(model, question, chunks, k = 5):
+    q_vec = model.encode(question, normalize_embeddings=True)
+    doc_vecs = np.array([c[4].to_numpy() for c in chunks])
+    scores = doc_vecs @ q_vec
+    
+    order = np.argsort(scores)[::-1]
+    
+    return [(chunks[i][0], chunks[i][3], float(scores[i])) for i in order[:k]]
 
 
 if __name__ == "__main__":
