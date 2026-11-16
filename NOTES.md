@@ -282,7 +282,7 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
   - `GET /health`: liveness check.
   - `GET /papers`: id and title of every validation-split paper.
   - `GET /papers/{paper_id}/questions`: that paper's QASPER questions (for suggestions in the UI); 404 if unknown.
-  - `POST /ask` `{paper_id, question}`: returns `{answer, passages}`, where each passage has `number` (matches the [n] citations), `chunk_index`, `score` and `text`. 404 for an unknown paper, 422 for invalid input (Pydantic: question 3–500 chars), 503 if Ollama is unreachable.
+  - `POST /ask` `{paper_id, question}`: returns `{answer, passages}`, where each passage has `number` (matches the [n] citations), `chunk_index`, `score` and `text`. 404 for an unknown paper, 422 for invalid input (Pydantic: question 3–500 chars), 503 if the database or Ollama is unreachable.
 - Model, paper titles and questions load once at startup (`lifespan`); a fresh DB connection per request (fine for a demo; a pool would be used under load).
 - Endpoints are plain `def`, not `async def`: the model, psycopg and Ollama calls are blocking, so FastAPI runs them in a thread pool.
 - Added `dense_search` to `retrievers.py` (top-k with text and scores, same `(index, text, score)` shape `build_prompt` expects). `dense_rank` left unchanged so the evaluation stays reproducible.
@@ -294,8 +294,27 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
 - Through the API with para_200 + dense: evidence paragraph is passage 3; answer is correct ("pivoting, multilingual NMT (MNMT), and cross-lingual transfer without pretraining") and cites [3].
 - Use this question for the demo recording.
 
+## Phase 5b: React front end
 
-## Final conclusions (as of Phase 5a)
+- `frontend/`: React + Vite + Tailwind (JavaScript). Run with `npm run dev` from `frontend/` (http://localhost:5173), with the API running on port 8000. API URL set in `frontend/.env` (`VITE_API_URL`).
+- Layout: left column picks a paper (text filter + dropdown over 281 validation papers) and lists its QASPER questions as one-click suggestions; right column has the question box, the answer and the five retrieved passages.
+- The answer's `[n]` citations render as links to their passages; cited passages are highlighted. Each passage shows its similarity score and chunk index, so retrieval is visible, not just the LLM's output.
+- Opens on the demo paper (1912.01214) by default.
+- Components: `App` (state), `PaperPicker`, `AskBox` (⌘+Enter to ask; disabled under 3 characters or while loading), `Answer`, `Passages`. `api.js` wraps fetch; `citations.js` extracts cited numbers with a regex.
+- Effect cleanup flag (`ignore`) prevents a slow question fetch for a previous paper from overwriting the current paper's list.
+- Clear error states: API unreachable, database down, Ollama down.
+
+### Gotcha found while testing
+- With the Postgres container stopped, `/ask` raised an unhandled error. FastAPI's bare 500 response skips the CORS middleware, so the browser blocked it and the page showed "Can't reach the API" even though the API was running.
+- Fix: catch `psycopg.OperationalError` around the DB call and raise `HTTPException(503, "Database unavailable…")`, which goes through the normal error path with CORS headers. Lesson: unhandled server errors can look like network failures in the browser.
+
+### Test results
+- Demo paper, "which multilingual approaches do they compare with?": correct answer citing [3]; passage 3 (chunk 32) highlighted as cited. Works end to end.
+- TODO: "which datasets did they experiment with?" (Phase 1 generation failure): answered or refused with para_200?
+- TODO: paper switching (1810.08699), Ollama-down and database-down messages, phone-width layout.
+
+
+## Final conclusions (as of Phase 5b)
 
 ### Evaluation (test split, 1,308 questions)
 1. **Cross-encoder reranker is significantly worse than plain dense retrieval** (−5.5 and −8.6 Hit@1 points on test), at ~18x the cost. Most robust result; survives Bonferroni correction.
@@ -308,4 +327,4 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
 6. **Only 3% of test questions fail in every configuration**, so most failures are configuration-specific. In a sample of 20, about 30% were labelling artifacts (a correct passage retrieved, but annotators marked another), so the evaluation underestimates retrieval quality. The main genuine failure mode is **wording mismatch** between question and evidence, which neither dense nor BM25 retrieval solved here.
 
 ### Applied
-7. **The best configuration now powers the API** (`POST /ask`, para_200 + dense, top 5). On the Phase 1 failure case (paper 1912.01214, "which multilingual approaches do they compare with?"), it retrieves the evidence as passage 3 and the model answers correctly with a citation, where the original token_400_80 setup ranked it 10th and the model refused. This is one illustrative example, not a measured result; the measured claims are points 1–6.
+7. **The best configuration now powers the API and a web demo** (`POST /ask` + React front end, para_200 + dense, top 5). On the Phase 1 failure case (paper 1912.01214, "which multilingual approaches do they compare with?"), it retrieves the evidence as passage 3 and the model answers correctly with a citation, where the original token_400_80 setup ranked it 10th and the model refused. This is one illustrative example, not a measured result; the measured claims are points 1–6.
