@@ -4,6 +4,8 @@ A retrieval-augmented generation (RAG) system over NLP research papers, built fr
 
 The system answers questions about papers in the [QASPER](https://allenai.org/data/qasper) dataset. The evaluation measures, across 16 configurations and 2,196 questions, how often each configuration retrieves the passage that human annotators marked as the evidence.
 
+The best configuration also powers a small web app (FastAPI + React) that answers questions about a paper and shows the retrieved passages it cited.
+
 ---
 
 ## Key findings
@@ -20,6 +22,12 @@ The best configuration was **paragraph-aware chunking (≤200 tokens) with dense
 ![Paired comparisons on the test set](figures/significance.png)
 
 *Each dot is the mean per-question difference between two configurations; bars are 95% paired-bootstrap intervals. Intervals that cross the dashed line are not statistically significant.*
+
+### Demo
+
+![Asking a question in the web app](figures/demo.gif)
+
+*The web app on paper 1912.01214. The question "which multilingual approaches do they compare with?" failed in the first version of the system: with fixed 400-token chunks, the evidence paragraph sat at the end of a chunk about training details, ranked 10th, and the model refused to answer. With paragraph-aware chunks and dense retrieval, the evidence ranks 3rd and the answer is correct, citing passage 3.*
 
 ---
 
@@ -70,7 +78,7 @@ loader.py   → clean paragraphs              embed the question
 chunking.py → chunks + character spans      rank that paper's chunks
      │                                            │
 index.py    → embed, store in Postgres      top chunks → LLM → cited answer
-              (pgvector)                          (ask.py)
+              (pgvector)                     (api.py, ask.py)
 ```
 
 Retrieval is always scoped to the question's own paper. QASPER questions refer to "they" and "this paper", so searching across papers would mix chunking quality with identifying the right paper.
@@ -217,14 +225,16 @@ rag-project/
 ├── loader.py            Load and clean QASPER papers and questions
 ├── chunking.py          The chunkers
 ├── index.py             Chunk, embed and store papers in Postgres
-├── retrievers.py        The four ranking methods
+├── retrievers.py        The four ranking methods, plus dense_search for the API
 ├── labels.py            Locate evidence and label relevant chunks
 ├── eval.py              Score one chunker + retriever on a split
-├── ask.py               Ask a question, get a cited answer from an LLM
+├── api.py               FastAPI service: papers, questions, ask
+├── ask.py               Command-line version (prompt + LLM call, reused by the API)
 ├── significance.py      Paired bootstrap tests
 ├── make_table.py        Results table from a split's summary.csv
 ├── make_figures.py      The two figures
 ├── failures.py          Find questions every configuration misses
+├── frontend/            React + Vite + Tailwind web app
 ├── docker-compose.yml   Postgres + pgvector
 ├── requirements.txt
 ├── .env.example         Copy to .env and set the database password
@@ -264,8 +274,9 @@ Run as `python index.py token 400 80` or `python index.py para 200`. For every p
 - `rrf_fuse(rankings, k=60)` combines several rankings by adding 1/(k + rank) for each chunk. It uses ranks, not scores, because dense and BM25 scores are on different scales.
 - `hybrid_rank` fuses the dense and BM25 rankings.
 - `rerank_rank` scores each (question, chunk) pair with the cross-encoder.
+- `dense_search` returns the top *k* chunks with their text and scores, for the API. It ranks exactly like `dense_rank`, which is left unchanged so the evaluation stays reproducible.
 
-Each ranker returns chunk indices, best first.
+The evaluation rankers return chunk indices, best first.
 
 **`labels.py`: the answer key**
 
@@ -284,9 +295,17 @@ Run as `python eval.py para_200 dense`, with `SPLIT=test` in front for the test 
 
 It writes one row per question to `results/<split>/per_question_<chunker>_<retriever>.csv` and appends one summary row to `results/<split>/summary.csv`.
 
-**`ask.py`: the RAG system itself**
+**`api.py` and `frontend/`: the RAG system itself**
 
-`retrieve` fetches the top 5 chunks with a pgvector SQL query, `build_prompt` numbers them and adds instructions to cite passages and to refuse when the context lacks the answer, and `generate` sends the prompt to `llama3.1:8b` through Ollama at temperature 0.
+`api.py` is a FastAPI service using the best configuration from the evaluation, para_200 + dense, top 5 (about 1,000 tokens of context, the budget the results were measured at). The embedding model, paper titles and questions load once at startup.
+
+- `GET /papers` and `GET /papers/{paper_id}/questions` list the papers and each paper's QASPER questions.
+- `POST /ask` retrieves the top 5 chunks, numbers them in a prompt that tells the model to cite passages and to refuse when the context lacks the answer, and sends it to `llama3.1:8b` through Ollama at temperature 0. It returns the answer and the five passages with their scores.
+- Errors come back as clear status codes: 404 for an unknown paper, 422 for invalid input, and 503 if the database or Ollama is unreachable.
+
+The prompt and the LLM call live in `ask.py` (`build_prompt`, `generate`), which the API imports. `ask.py` also still runs on its own as the original command-line version from the first phase of the project.
+
+`frontend/` is a React app (Vite + Tailwind). You pick a paper, choose one of its QASPER questions or type your own, and get the answer with each `[n]` citation linked to its passage. Cited passages are highlighted, and every passage shows its similarity score, so you can see what retrieval found, not just what the model wrote.
 
 **Analysis scripts**
 
@@ -299,7 +318,7 @@ It writes one row per question to `results/<split>/per_question_<chunker>_<retri
 
 ## Reproducing the results
 
-Requirements: Python 3.12, Docker, and (for `ask.py` only) [Ollama](https://ollama.com).
+Requirements: Python 3.12, Docker, Node.js (for the web app), and [Ollama](https://ollama.com) (for answering questions).
 
 ```bash
 # 1. Setup
@@ -339,18 +358,34 @@ python make_table.py test
 python significance.py
 python make_figures.py
 python failures.py
-
-# 6. Ask a question (requires: ollama pull llama3.1:8b)
-python ask.py
 ```
 
 Indexing takes under a minute per chunker. Dense, BM25 and hybrid evaluations take seconds; each reranker run takes roughly 5–7 minutes on an Apple M4 Pro.
+
+### Running the web app
+
+Needs the validation split indexed with `para_200` (step 2) and the model pulled once with `ollama pull llama3.1:8b`.
+
+```bash
+# Terminal 1: the API (from the project root, venv active)
+uvicorn api:app --reload          # http://localhost:8000/docs for interactive API docs
+
+# Terminal 2: the web app
+cd frontend
+npm install
+npm run dev                       # http://localhost:5173
+```
+
+The app opens on paper 1912.01214. Docker, Ollama and the API must all be running.
 
 ---
 
 ## Stack
 
-Python, PostgreSQL with pgvector (Docker), sentence-transformers, rank-bm25, numpy, matplotlib, Ollama. No RAG framework: chunking, retrieval, labelling and evaluation are implemented directly, so every component can be inspected and changed.
+**Evaluation:** Python, PostgreSQL with pgvector (Docker), sentence-transformers, rank-bm25, NumPy, matplotlib.
+**App:** FastAPI, React, Vite, Tailwind CSS, Ollama (Llama 3.1 8B).
+
+No RAG framework: chunking, retrieval, labelling and evaluation are implemented directly, so every component can be inspected and changed.
 
 ## Author
 
