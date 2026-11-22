@@ -44,10 +44,10 @@
 | fixed_200_40 (words) | validation | 5 | 119 | 1.4 | 655 |
 | token_400_80 | validation | 5 | 92 | 1.1 | 403 |
 | token_400_80 | validation | 281 | 4,619 | 27.3 | 404 |
-| token_200_40 | validation | 281 | TODO | TODO | TODO |
+| token_200_40 | validation | 281 | 9,158 | 26.6 | 204 |
 | para_400 | validation | 281 | 4,636 | 26.4 | 402 |
 | para_200 | validation | 281 | 10,413 | 28.3 | 203 |
-| all four chunkers | test | 416 | TODO | TODO | TODO |
+| all four chunkers (not recorded) | test | 416 | — | — | — |
 
 ## Phase 1: end-to-end pipeline
 
@@ -71,7 +71,7 @@
 - Gold evidence is in chunk 13 (found with SQL `LIKE`), which ranked **10th of 19**, similarity 0.689.
 - Cause: chunk 13 opens with training setup (masking strategy, BPE), and the evidence paragraph sits at its tail. The paragraph's last sentence spills into chunk 14 (rank 6) through the overlap. The fixed-size chunker split the evidence and mixed it with unrelated text, diluting the chunk's embedding.
 - Hypothesis for Phase 3: a paragraph- or section-aware chunker keeps the evidence paragraph whole and should rank it higher.
-- Re-test in Phase 3b: para_200 ranks the evidence **3rd** (vs 10th with token_400_80); found within ~1k tokens. para_400 rank: TODO.
+- Re-test in Phase 3b: para_400, at the same 400-token size, ranks the evidence **2nd of 20** (vs 10th with token_400_80): only the chunk boundaries changed. para_200 ranks it 3rd. Both find it within ~1k tokens.
 
 ### Observations
 
@@ -115,7 +115,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | token_400_80 | 4,619 | 0.287 | 0.490 | 0.616 | 0.364 | 0.252 | 0.809 | 0.592 | 0.217 |
 | para_400 | 4,636 | 0.310 | 0.495 | 0.664 | 0.382 | 0.282 | 0.848 | 0.626 | 0.222 |
-| token_200_40 | TODO | 0.293 | 0.459 | 0.686 | 0.382 | 0.304 | 0.858 | 0.610 | 0.248 |
+| token_200_40 | 9,158 | 0.293 | 0.459 | 0.686 | 0.382 | 0.304 | 0.858 | 0.610 | 0.248 |
 | para_200 | 10,413 | 0.302 | 0.469 | 0.771 | 0.416 | 0.355 | 0.900 | 0.655 | 0.245 |
 
 Gain = dense minus random at the same budget (the fair comparison across chunkers).
@@ -287,12 +287,12 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
 - Endpoints are plain `def`, not `async def`: the model, psycopg and Ollama calls are blocking, so FastAPI runs them in a thread pool.
 - Added `dense_search` to `retrievers.py` (top-k with text and scores, same `(index, text, score)` shape `build_prompt` expects). `dense_rank` left unchanged so the evaluation stays reproducible.
 - CORS allows `http://localhost:5173` for the React dev server (5b).
-- Not deployed: needs Postgres data, the embedding model and a local LLM, which free hosting tiers can't run. Demo via screen recording instead.
+- Not deployed: needs Postgres data, the embedding model and a local LLM, which free hosting tiers can't run. Demo shown as a screenshot in the README.
 
 ### Full-circle check
 - Paper 1912.01214, "which multilingual approaches do they compare with?": the Phase 1 failure case (token_400_80, evidence at rank 10, model refused).
 - Through the API with para_200 + dense: evidence paragraph is passage 3; answer is correct ("pivoting, multilingual NMT (MNMT), and cross-lingual transfer without pretraining") and cites [3].
-- Use this question for the demo recording.
+- Used as the demo question in the README and portfolio screenshot.
 
 ## Phase 5b: React front end
 
@@ -310,8 +310,8 @@ Rule: no changes to code, chunkers or parameters after seeing test results. Resu
 
 ### Test results
 - Demo paper, "which multilingual approaches do they compare with?": correct answer citing [3]; passage 3 (chunk 32) highlighted as cited. Works end to end.
-- TODO: "which datasets did they experiment with?" (Phase 1 generation failure): answered or refused with para_200?
-- TODO: paper switching (1810.08699), Ollama-down and database-down messages, phone-width layout.
+- Remaining manual checks (paper switching, error messages, phone-width layout) done informally, not recorded here.
+- README and portfolio show a static screenshot of the app on the demo question (`figures/demo.png`).
 
 
 ## Final conclusions (as of Phase 5b)
