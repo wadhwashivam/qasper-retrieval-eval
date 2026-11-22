@@ -25,7 +25,7 @@ The best configuration was **paragraph-aware chunking (≤200 tokens) with dense
 
 ### Demo
 
-![Asking a question in the web app](figures/demo.gif)
+![The web app answering a question with cited passages](figures/demo.png)
 
 *The web app on paper 1912.01214. The question "which multilingual approaches do they compare with?" failed in the first version of the system: with fixed 400-token chunks, the evidence paragraph sat at the end of a chunk about training details, ranked 10th, and the model refused to answer. With paragraph-aware chunks and dense retrieval, the evidence ranks 3rd and the answer is correct, citing passage 3.*
 
